@@ -1,8 +1,3 @@
-#define REG_AFE_FIFOCNT   0x4004C0C0
-#define REG_AFE_INT0      0x4004C100
-#ifndef REG_AFE_SEQSTAT
-#define REG_AFE_SEQSTAT 0x4004C044
-#endif
 /**  
  * @file       ad5940.h
  * @brief      AD5940 library. This file contains all AD5940 library functions. 

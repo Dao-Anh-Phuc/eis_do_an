@@ -9,19 +9,12 @@
 // #define AD5940_Reset_Pin       16
 // #define AD5940_Int_Pin         17
 
-// #define VSPI_MISO_AD5940_Pin   12   // IO12
-// #define VSPI_MOSI_AD5940_Pin   11   // IO11
-// #define VSPI_SCLK_AD5940_Pin   13   // IO13
-// #define VSPI_CS_AD5940_Pin     10   // IO10
-// #define AD5940_Reset_Pin       18
-// #define AD5940_Int_Pin         17
-
-#define VSPI_MISO_AD5940_Pin   11  // IO11
-#define VSPI_MOSI_AD5940_Pin   12   // IO12
+#define VSPI_MISO_AD5940_Pin   12   // IO12
+#define VSPI_MOSI_AD5940_Pin   11   // IO11
 #define VSPI_SCLK_AD5940_Pin   13   // IO13
-#define VSPI_CS_AD5940_Pin     14   // IO14
-#define AD5940_Reset_Pin       9
-#define AD5940_Int_Pin         10
+#define VSPI_CS_AD5940_Pin     10   // IO10
+#define AD5940_Reset_Pin       18
+#define AD5940_Int_Pin         17
 
 #ifndef VSPI
 #define VSPI 1  // ID của SPI bus VSPI trên ESP32

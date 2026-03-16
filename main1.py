@@ -14,6 +14,19 @@ import math
 import pandas as pd
 from scipy.signal import savgol_filter
 import tkinter.font as tkFont
+import os
+import sys
+
+# Hàm hỗ trợ tìm đường dẫn file cho cả Python và PyInstaller EXE
+def resource_path(relative_path):
+    """Lấy đường dẫn tuyệt đối đến resource, hoạt động cho cả dev và PyInstaller"""
+    try:
+        # PyInstaller tạo temp folder và lưu path trong _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base_path, relative_path)
+
 # Chuyển toàn bộ code SWV thành một class SWVApp đầy đủ và sẵn sàng nhúng vào frame
 
 
@@ -25,22 +38,14 @@ class ASVApp:
         self.root = parent
         self.serial_port = None
 
-        # Thông số mặc định cho ASV (nhiều hơn CV)
-        self.start_voltage = -200  # mV (stripping)
-        self.end_voltage = 700     # mV (stripping)
-        self.step_voltage = 10     # mV (stripping)
-        
-        # Thông số cleaning phase
-        self.clean_voltage = 1100  # mV (positive voltage)
-        self.clean_time = 8000     # ms
-        
-        # Thông số deposition phase
-        self.dep_voltage = -1000   # mV (negative voltage)
-        self.dep_time = 120000     # ms (2 minutes)
-        
-        # Thông số equilibrium phase
-        self.eq_voltage = -50      # mV (near neutral)
-        self.eq_time = 10000       # ms
+        # Thong so DPASV: deposition + DPV stripping
+        self.start_voltage = -1000  # mV (stripping)
+        self.end_voltage = 100    # mV (stripping)
+        self.step_voltage = 5     # mV
+        self.pulse_amp = 50        # mV
+        self.pulse_width = 40      # ms
+        self.dep_voltage = -1100   # mV (negative voltage)
+        self.dep_time = 120000     # ms
 
         # Dữ liệu
         self.buffer_voltage = []
@@ -64,7 +69,7 @@ class ASVApp:
         logo_frame.pack(side="right", padx=10)
 
         try:
-            img1 = Image.open("E:/Download/dai-hoc-khoa-hoc-tu-nhien-Photoroom.png").resize((120, 100), Image.Resampling.LANCZOS)
+            img1 = Image.open(resource_path("dai-hoc-khoa-hoc-tu-nhien-Photoroom.png")).resize((120, 100), Image.Resampling.LANCZOS)
             self.logo1 = ImageTk.PhotoImage(img1)
             tk.Label(logo_frame, image=self.logo1, bg="#E8F5E8").grid(row=0, column=0, padx=5)
 
@@ -78,7 +83,7 @@ class ASVApp:
             )
             title_label.grid(row=0, column=1, padx=10)
 
-            img2 = Image.open("E:/Download/Logo-DH-Quoc-Gia-Ha-Noi-VNU-Photoroom.png").resize((60, 60), Image.Resampling.LANCZOS)
+            img2 = Image.open(resource_path("Logo-DH-Quoc-Gia-Ha-Noi-VNU-Photoroom.png")).resize((60, 60), Image.Resampling.LANCZOS)
             self.logo2 = ImageTk.PhotoImage(img2)
             tk.Label(logo_frame, image=self.logo2, bg="#E8F5E8").grid(row=0, column=2, padx=5)
         except Exception as e:
@@ -112,37 +117,25 @@ class ASVApp:
         ttk.Button(self.frame_left, text="\u25B6\ufe0f Measure", command=self.send_measure_command, style="ASV.TButton").pack(fill="x", pady=3)
         ttk.Button(self.frame_left, text="🧹 Clear Data", command=self.clear_data, style="ASV.TButton").pack(fill="x", pady=3)
 
-        # ===== ASV Parameter Config (4 phases) =====
+        # ===== ASV Parameter Config (DPASV) =====
         ttk.Label(self.frame_left, text="ASV Parameters", font=("Segoe UI", 15, "bold"), foreground="#D84315").pack(anchor="w", pady=(12, 5))
-        
-        # Cleaning Phase
-        cleaning_frame = tk.LabelFrame(self.frame_left, text="1. Cleaning Phase", font=("Segoe UI", 12, "bold"), 
-                                     bg="#E8F5E8", fg="#FF5722", relief="groove", bd=2)
-        cleaning_frame.pack(fill="x", pady=5, padx=2)
-        self.clean_voltage_entry = self.add_labeled_entry(cleaning_frame, "Clean Voltage (mV):", self.clean_voltage, row=0)
-        self.clean_time_entry = self.add_labeled_entry(cleaning_frame, "Clean Time (ms):", self.clean_time, row=1)
 
         # Deposition Phase
-        deposition_frame = tk.LabelFrame(self.frame_left, text="2. Deposition Phase", font=("Segoe UI", 12, "bold"), 
+        deposition_frame = tk.LabelFrame(self.frame_left, text="1. Deposition Phase", font=("Segoe UI", 12, "bold"), 
                                        bg="#E8F5E8", fg="#3F51B5", relief="groove", bd=2)
         deposition_frame.pack(fill="x", pady=5, padx=2)
         self.dep_voltage_entry = self.add_labeled_entry(deposition_frame, "Dep Voltage (mV):", self.dep_voltage, row=0)
         self.dep_time_entry = self.add_labeled_entry(deposition_frame, "Dep Time (ms):", self.dep_time, row=1)
 
-        # Equilibrium Phase
-        equilibrium_frame = tk.LabelFrame(self.frame_left, text="3. Equilibrium Phase", font=("Segoe UI", 12, "bold"), 
-                                        bg="#E8F5E8", fg="#9C27B0", relief="groove", bd=2)
-        equilibrium_frame.pack(fill="x", pady=5, padx=2)
-        self.eq_voltage_entry = self.add_labeled_entry(equilibrium_frame, "Eq Voltage (mV):", self.eq_voltage, row=0)
-        self.eq_time_entry = self.add_labeled_entry(equilibrium_frame, "Eq Time (ms):", self.eq_time, row=1)
-
-        # Stripping Phase
-        stripping_frame = tk.LabelFrame(self.frame_left, text="4. Stripping Phase (LSV)", font=("Segoe UI", 12, "bold"), 
+        # Stripping Phase (DPV)
+        stripping_frame = tk.LabelFrame(self.frame_left, text="2. Stripping Phase (DPV)", font=("Segoe UI", 12, "bold"), 
                                       bg="#E8F5E8", fg="#E91E63", relief="groove", bd=2)
         stripping_frame.pack(fill="x", pady=5, padx=2)
         self.start_entry = self.add_labeled_entry(stripping_frame, "Start Voltage (mV):", self.start_voltage, row=0)
         self.end_entry = self.add_labeled_entry(stripping_frame, "End Voltage (mV):", self.end_voltage, row=1)
         self.step_entry = self.add_labeled_entry(stripping_frame, "Step (mV):", self.step_voltage, row=2)
+        self.pulse_amp_entry = self.add_labeled_entry(stripping_frame, "Pulse Amp (mV):", self.pulse_amp, row=3)
+        self.pulse_width_entry = self.add_labeled_entry(stripping_frame, "Pulse Width (ms):", self.pulse_width, row=4)
 
         # Import/Export
         ttk.Label(self.frame_left, text="Data Control", font=("Segoe UI", 15, "bold"), foreground="#00838F").pack(anchor="w", pady=(12, 5))
@@ -210,37 +203,48 @@ class ASVApp:
     def send_measure_command(self):
         if self.serial_port and self.serial_port.is_open:
             try:
-                # Đọc tất cả tham số ASV
+                # Doc tham so DPASV
                 self.start_voltage = int(self.start_entry.get())
                 self.end_voltage = int(self.end_entry.get())
                 self.step_voltage = int(self.step_entry.get())
-                self.clean_voltage = int(self.clean_voltage_entry.get())
-                self.clean_time = int(self.clean_time_entry.get())
+                self.pulse_amp = int(self.pulse_amp_entry.get())
+                self.pulse_width = int(self.pulse_width_entry.get())
                 self.dep_voltage = int(self.dep_voltage_entry.get())
                 self.dep_time = int(self.dep_time_entry.get())
-                self.eq_voltage = int(self.eq_voltage_entry.get())
-                self.eq_time = int(self.eq_time_entry.get())
+
+                if self.step_voltage <= 0:
+                    raise ValueError("Step must be > 0 mV")
+                if self.pulse_amp <= 0 or self.pulse_width <= 0:
+                    raise ValueError("Pulse amplitude/width must be > 0")
+                if self.dep_time < 0:
+                    raise ValueError("Deposition time must be >= 0")
+
+                # Neu dep_t == 0 hoac dep_v == 0 thi firmware se chay nhu DPV (khong deposition)
+                use_deposition = (self.dep_time != 0 and self.dep_voltage != 0)
+                if use_deposition and self.dep_voltage >= 0:
+                    raise ValueError("Deposition voltage must be negative in ASV deposition mode")
+
+                # Firmware can /step, app can so diem de doc serial
+                expected_points = int(abs(self.end_voltage - self.start_voltage) // self.step_voltage) + 1
+                print(f"ASV Step size: {self.step_voltage} mV, expected points: {expected_points}")
+
+                # Format moi: 8#S?E/step|pulseAmp$pulseWidth|depV$depT!
+                asv_command = (f"8#{self.start_voltage}?{self.end_voltage}/{self.step_voltage}|"
+                             f"{self.pulse_amp}${self.pulse_width}|"
+                             f"{self.dep_voltage}${self.dep_time}!")
                 
-                # Tính số bước cho stripping phase
-                num_step = int((self.end_voltage - self.start_voltage) // self.step_voltage) + 1
-                print(f"ASV Steps: {num_step}")
-                
-                # Format lệnh ASV: 8#S_Vol?E_Vol/StepNumber|cleanV$cleanT|depV$depT|eqV$eqT!
-                asv_command = (f"8#{self.start_voltage}?{self.end_voltage}/{num_step}|"
-                             f"{self.clean_voltage}${self.clean_time}|"
-                             f"{self.dep_voltage}${self.dep_time}|"
-                             f"{self.eq_voltage}${self.eq_time}!")
-                
+                mode_text = "ASV (Deposition + DPV)" if use_deposition else "DPV mode (dep_t=0 or dep_v=0)"
                 print(f"Send ASV: {asv_command}")
+                print(f"ASV Mode: {mode_text}")
                 self.serial_port.write(asv_command.encode())
                 
                 # Reset dữ liệu
                 self.buffer_voltage.clear()
                 self.buffer_current_raw.clear()
                 self.receiver_count = 0
-                self.expected_samples = num_step
+                self.expected_samples = expected_points
                 self.is_receiving = True
-                self.status_label.config(text="ASV Measuring...")
+                self.status_label.config(text=f"Measuring: {mode_text}")
                 threading.Thread(target=self.read_serial, daemon=True).start()
                 
             except Exception as e:
@@ -253,7 +257,8 @@ class ASVApp:
             try:
                 line = self.serial_port.readline().decode('utf-8').strip()
                 if line and ";" in line:
-                    self.buffer_voltage.append(self.start_voltage + self.receiver_count * self.step_voltage)
+                    direction = 1 if self.end_voltage >= self.start_voltage else -1
+                    self.buffer_voltage.append(self.start_voltage + self.receiver_count * self.step_voltage * direction)
                     self.buffer_current_raw.append(float(line.split(";")[1]))
                     self.receiver_count += 1
             except Exception as e:
@@ -282,7 +287,8 @@ class ASVApp:
         self.line.set_data(self.x_data, self.y_data)
         self.ax.relim()
         self.ax.autoscale_view()
-        self.ax.set_xlim(self.start_voltage - 50, self.end_voltage + 50)
+        self.ax.set_xlim(min(self.start_voltage, self.end_voltage) - 50,
+                         max(self.start_voltage, self.end_voltage) + 50)
         self.ax.set_ylabel("Current (µA)", fontsize=14)
         # Làm to và đậm các số trên trục mỗi lần cập nhật
         for label in (self.ax.get_xticklabels() + self.ax.get_yticklabels()):
@@ -306,21 +312,26 @@ class ASVApp:
         if filepath:
             with open(filepath, 'r') as f:
                 lines = f.readlines()
-                if len(lines) < 10:  # ASV có nhiều tham số hơn
-                    messagebox.showerror("Error", "ASV file format is incorrect!")
-                    return
                 try:
-                    # Import tất cả tham số ASV
-                    self.start_voltage = int(lines[0].split(',')[1])
-                    self.end_voltage = int(lines[1].split(',')[1])
-                    self.step_voltage = int(lines[2].split(',')[1])
-                    self.clean_voltage = int(lines[3].split(',')[1])
-                    self.clean_time = int(lines[4].split(',')[1])
-                    self.dep_voltage = int(lines[5].split(',')[1])
-                    self.dep_time = int(lines[6].split(',')[1])
-                    self.eq_voltage = int(lines[7].split(',')[1])
-                    self.eq_time = int(lines[8].split(',')[1])
-                    
+                    # Ho tro ca format moi va cu
+                    params = {}
+                    data_start_idx = None
+                    for idx, line in enumerate(lines):
+                        parts = [p.strip() for p in line.strip().split(",")]
+                        if len(parts) >= 2 and parts[0] == "Voltage (mV)":
+                            data_start_idx = idx + 1
+                            break
+                        if len(parts) >= 2:
+                            params[parts[0]] = parts[1]
+
+                    self.start_voltage = int(params.get("Start Voltage", self.start_voltage))
+                    self.end_voltage = int(params.get("End Voltage", self.end_voltage))
+                    self.step_voltage = int(params.get("Step", self.step_voltage))
+                    self.pulse_amp = int(params.get("Pulse Amplitude", self.pulse_amp))
+                    self.pulse_width = int(params.get("Pulse Width", self.pulse_width))
+                    self.dep_voltage = int(params.get("Deposition Voltage", self.dep_voltage))
+                    self.dep_time = int(params.get("Deposition Time", self.dep_time))
+
                     # Update UI
                     self.start_entry.delete(0, tk.END)
                     self.start_entry.insert(0, str(self.start_voltage))
@@ -328,24 +339,23 @@ class ASVApp:
                     self.end_entry.insert(0, str(self.end_voltage))
                     self.step_entry.delete(0, tk.END)
                     self.step_entry.insert(0, str(self.step_voltage))
-                    self.clean_voltage_entry.delete(0, tk.END)
-                    self.clean_voltage_entry.insert(0, str(self.clean_voltage))
-                    self.clean_time_entry.delete(0, tk.END)
-                    self.clean_time_entry.insert(0, str(self.clean_time))
+                    self.pulse_amp_entry.delete(0, tk.END)
+                    self.pulse_amp_entry.insert(0, str(self.pulse_amp))
+                    self.pulse_width_entry.delete(0, tk.END)
+                    self.pulse_width_entry.insert(0, str(self.pulse_width))
                     self.dep_voltage_entry.delete(0, tk.END)
                     self.dep_voltage_entry.insert(0, str(self.dep_voltage))
                     self.dep_time_entry.delete(0, tk.END)
                     self.dep_time_entry.insert(0, str(self.dep_time))
-                    self.eq_voltage_entry.delete(0, tk.END)
-                    self.eq_voltage_entry.insert(0, str(self.eq_voltage))
-                    self.eq_time_entry.delete(0, tk.END)
-                    self.eq_time_entry.insert(0, str(self.eq_time))
                     
                     # Import data
                     self.buffer_voltage.clear()
                     self.buffer_current_raw.clear()
                     self.buffer_current_filtered.clear()
-                    for line in lines[10:]:  # Skip header lines
+                    if data_start_idx is None:
+                        raise ValueError("ASV file missing data header 'Voltage (mV),Current (uA)'")
+
+                    for line in lines[data_start_idx:]:
                         parts = line.strip().split(",")
                         if len(parts) == 2:
                             self.buffer_voltage.append(float(parts[0]))
@@ -363,16 +373,14 @@ class ASVApp:
         if filepath:
             try:
                 with open(filepath, 'w') as f:
-                    # Export tất cả tham số ASV
+                    # Export tham so DPASV
                     f.write(f"Start Voltage,{self.start_voltage},[mV]\n")
                     f.write(f"End Voltage,{self.end_voltage},[mV]\n")
                     f.write(f"Step,{self.step_voltage},[mV]\n")
-                    f.write(f"Clean Voltage,{self.clean_voltage},[mV]\n")
-                    f.write(f"Clean Time,{self.clean_time},[ms]\n")
+                    f.write(f"Pulse Amplitude,{self.pulse_amp},[mV]\n")
+                    f.write(f"Pulse Width,{self.pulse_width},[ms]\n")
                     f.write(f"Deposition Voltage,{self.dep_voltage},[mV]\n")
                     f.write(f"Deposition Time,{self.dep_time},[ms]\n")
-                    f.write(f"Equilibrium Voltage,{self.eq_voltage},[mV]\n")
-                    f.write(f"Equilibrium Time,{self.eq_time},[ms]\n")
                     f.write("Voltage (mV),Current (uA)\n")
                     for v, raw in zip(self.buffer_voltage, self.buffer_current_raw):
                         f.write(f"{v},{raw}\n")
@@ -417,7 +425,7 @@ class LSVApp:
         logo_frame.pack(side="right", padx=10)
 
         try:
-            img1 = Image.open("E:/Download/dai-hoc-khoa-hoc-tu-nhien-Photoroom.png").resize((120, 100), Image.Resampling.LANCZOS)
+            img1 = Image.open(resource_path("dai-hoc-khoa-hoc-tu-nhien-Photoroom.png")).resize((120, 100), Image.Resampling.LANCZOS)
             self.logo1 = ImageTk.PhotoImage(img1)
             tk.Label(logo_frame, image=self.logo1, bg="#D1C4E9").grid(row=0, column=0, padx=5)
 
@@ -431,7 +439,7 @@ class LSVApp:
             )
             title_label.grid(row=0, column=1, padx=10)
 
-            img2 = Image.open("E:/Download/Logo-DH-Quoc-Gia-Ha-Noi-VNU-Photoroom.png").resize((60, 60), Image.Resampling.LANCZOS)
+            img2 = Image.open(resource_path("Logo-DH-Quoc-Gia-Ha-Noi-VNU-Photoroom.png")).resize((60, 60), Image.Resampling.LANCZOS)
             self.logo2 = ImageTk.PhotoImage(img2)
             tk.Label(logo_frame, image=self.logo2, bg="#D1C4E9").grid(row=0, column=2, padx=5)
         except Exception as e:
@@ -725,7 +733,7 @@ class DPVApp:
         logo_frame.pack(side="right", padx=10)
 
         try:
-            img1 = Image.open("E:/Download/dai-hoc-khoa-hoc-tu-nhien-Photoroom.png").resize((100, 80), Image.Resampling.LANCZOS)
+            img1 = Image.open(resource_path("dai-hoc-khoa-hoc-tu-nhien-Photoroom.png")).resize((100, 80), Image.Resampling.LANCZOS)
             self.logo1 = ImageTk.PhotoImage(img1)
             logo1_label = tk.Label(logo_frame, image=self.logo1, bg=bg_color)
             logo1_label.grid(row=0, column=0, padx=5)
@@ -1414,7 +1422,7 @@ class DPVApp:
                 index, current = line.split(";")
                 voltage = s_vol + int(index) * step
                 self.bufferV.append(voltage)
-                self.bufferI.append(-float(current))
+                self.bufferI.append(float(current))
             except:
                 continue
         # ✅ THAY ĐỔI: Sử dụng hàm filter nâng cao
@@ -1506,7 +1514,7 @@ class SWVApp:
         self.logo_frame.pack(side="right", padx=10)
 
         try:
-            img1 = Image.open("E:/Download/dai-hoc-khoa-hoc-tu-nhien-Photoroom.png").resize((100, 80), Image.Resampling.LANCZOS)
+            img1 = Image.open(resource_path("dai-hoc-khoa-hoc-tu-nhien-Photoroom.png")).resize((100, 80), Image.Resampling.LANCZOS)
             self.logo1 = ImageTk.PhotoImage(img1)
             logo1_label = tk.Label(self.logo_frame, image=self.logo1, bg="#94F1C6")
             logo1_label.grid(row=0, column=0, padx=5)
@@ -1788,7 +1796,7 @@ class SWVApp:
                 index2, current2 = serial_lines[i + 1].split(";")
                 current1 = float(current1)
                 current2 = float(current2)
-                voltage = s_vol + (i // 2) * step
+                voltage = -s_vol + (i // 2) * step
                 self.bufferVSW.append(voltage)
                 self.bufferCf.append(current1)
                 self.bufferCb.append(current2)
@@ -1908,6 +1916,7 @@ class CVApp:
         self.receiver_count = 0
         self.expected_samples = 0
         self.is_receiving = False
+        self.is_measuring = False  # ✅ THÊM: Cờ để tránh đo trùng
 
         self.setup_gui()
         self.setup_plot()
@@ -1921,7 +1930,7 @@ class CVApp:
         logo_frame.pack(side="right", padx=10)
 
         try:
-            img1 = Image.open("E:/Download/dai-hoc-khoa-hoc-tu-nhien-Photoroom.png").resize((120, 100), Image.Resampling.LANCZOS)
+            img1 = Image.open(resource_path("dai-hoc-khoa-hoc-tu-nhien-Photoroom.png")).resize((120, 100), Image.Resampling.LANCZOS)
             self.logo1 = ImageTk.PhotoImage(img1)
             tk.Label(logo_frame, image=self.logo1, bg="#FFCCCB").grid(row=0, column=0, padx=5)
 
@@ -1935,7 +1944,7 @@ class CVApp:
             )
             title_label.grid(row=0, column=1, padx=10)
 
-            img2 = Image.open("E:/Download/Logo-DH-Quoc-Gia-Ha-Noi-VNU-Photoroom.png").resize((60, 60), Image.Resampling.LANCZOS)
+            img2 = Image.open(resource_path("Logo-DH-Quoc-Gia-Ha-Noi-VNU-Photoroom.png")).resize((60, 60), Image.Resampling.LANCZOS)
             self.logo2 = ImageTk.PhotoImage(img2)
             tk.Label(logo_frame, image=self.logo2, bg="#FFCCCB").grid(row=0, column=2, padx=5)
         except Exception as e:
@@ -2119,6 +2128,11 @@ class CVApp:
             messagebox.showinfo("Disconnected", "Serial port disconnected")
 
     def send_measure_command(self):
+        # ✅ KIỂM TRA: Có đang đo không?
+        if self.is_measuring:
+            messagebox.showwarning("Warning", "Đang đo, vui lòng chờ hoàn tất!")
+            return
+            
         if self.serial_port and self.serial_port.is_open:
             try:
                 self.start_voltage = int(self.start_entry.get())
@@ -2141,32 +2155,87 @@ class CVApp:
                 
                 self.expected_samples = total_cv_steps * self.repeat_times
                 
+                # ✅ CLEAR BUFFER: Xóa dữ liệu cũ trước khi đo
+                self.safe_clear_buffer()
+                
+                # ✅ GỬI LỆNH
                 self.serial_port.write(cv_command.encode('utf-8'))
                 print(f"✅ Sent: {cv_command}")
+                
+                # ✅ SLEEP: Chờ một chút để thiết bị nhận lệnh
+                import time
+                time.sleep(0.1)
                 
                 self.buffer_serial.clear()
                 self.receiver_count = 0
                 self.is_receiving = True
+                self.is_measuring = True  # ✅ Đánh dấu đang đo
                 self.status_label.config(text=f"Measuring: {self.scan_rate} mV/s...")
                 self.thread = threading.Thread(target=self.read_serial, daemon=True)
                 self.thread.start()
                 
             except Exception as e:
                 messagebox.showerror("Send Error", f"Could not send command.\n\n{str(e)}")
+                self.is_measuring = False  # ✅ Reset cờ khi có lỗi
         else:
             messagebox.showwarning("Warning", "Serial port not connected")
 
+    def safe_clear_buffer(self):
+        """✅ Clear serial buffer an toàn trước khi đo"""
+        if self.serial_port and self.serial_port.is_open:
+            try:
+                self.serial_port.reset_input_buffer()
+                import time
+                start_time = time.time()
+                # Đọc và loại bỏ dữ liệu cũ trong 0.5 giây
+                while time.time() - start_time < 0.5:
+                    try:
+                        self.serial_port.timeout = 0.1
+                        remaining = self.serial_port.readline()
+                        if not remaining:
+                            break
+                    except:
+                        pass
+                print("✅ Buffer cleared")
+            except Exception as e:
+                print(f"⚠️ Clear buffer warning: {e}")
+
     def read_serial(self):
+        """✅ Đọc dữ liệu serial với timeout và error handling tốt hơn"""
+        timeout_count = 0
+        max_timeout = 100  # Số lần timeout tối đa trước khi dừng
+        
         while self.is_receiving and self.receiver_count < self.expected_samples:
             try:
-                line = self.serial_port.readline().decode('utf-8').strip()
-                if line and line[0].isdigit():
-                    self.buffer_serial.append(line)
-                    self.receiver_count += 1
+                self.serial_port.timeout = 0.2  # ✅ Timeout rõ ràng
+                line = self.serial_port.readline().decode('utf-8', errors='ignore').strip()
+                
+                # ✅ Kiểm tra tín hiệu END
+                if line == "END":
+                    print("✅ Nhận được tín hiệu END")
+                    break
+                
+                # ✅ Xử lý dữ liệu hợp lệ
+                if line and len(line) > 0:
+                    if line[0].isdigit() or ";" in line:
+                        self.buffer_serial.append(line)
+                        self.receiver_count += 1
+                        timeout_count = 0  # Reset timeout khi nhận được data
+                        print(f"📊 CV Data: {self.receiver_count}/{self.expected_samples}")
+                else:
+                    timeout_count += 1
+                    
             except Exception as e:
-                print("Read error:", e)
+                print(f"⚠️ Read error: {e}")
+                timeout_count += 1
+                
+            # ✅ Thoát nếu timeout quá nhiều
+            if timeout_count >= max_timeout:
+                print(f"❌ Timeout: Không nhận được dữ liệu sau {max_timeout} lần thử")
                 break
+                
         self.is_receiving = False
+        self.is_measuring = False  # ✅ Reset cờ đo
         self.process_cv_data()
 
     def process_cv_data(self):
@@ -2533,10 +2602,10 @@ class EISApp:
         # Logo bên phải
         from PIL import Image, ImageTk
         try:
-            img1 = Image.open("E:/Download/dai-hoc-khoa-hoc-tu-nhien-Photoroom.png").resize((120, 100), Image.Resampling.LANCZOS)
+            img1 = Image.open(resource_path("dai-hoc-khoa-hoc-tu-nhien-Photoroom.png")).resize((120, 100), Image.Resampling.LANCZOS)
             self.logo1 = ImageTk.PhotoImage(img1)
             tk.Label(top_frame, image=self.logo1, bg=bg_color).pack(side=tk.RIGHT, padx=5)
-            img2 = Image.open("E:/oE/Download/images-Photoroom.png").resize((65, 65), Image.Resampling.LANCZOS)
+            img2 = Image.open(resource_path("Logo-DH-Quoc-Gia-Ha-Noi-VNU-Photoroom.png")).resize((65, 65), Image.Resampling.LANCZOS)
             self.logo2 = ImageTk.PhotoImage(img2)
             tk.Label(top_frame, image=self.logo2, bg=bg_color).pack(side=tk.RIGHT, padx=5)
         except Exception as e:
@@ -2924,7 +2993,7 @@ class ChronoAmperometryApp:
         logo_frame.pack(side="right", padx=10)
 
         try:
-            img1 = self.Image.open("E:/Download/dai-hoc-khoa-hoc-tu-nhien-Photoroom.png").resize((100, 80), self.Image.Resampling.LANCZOS)
+            img1 = self.Image.open(resource_path("dai-hoc-khoa-hoc-tu-nhien-Photoroom.png")).resize((100, 80), self.Image.Resampling.LANCZOS)
             self.logo1 = self.ImageTk.PhotoImage(img1)
             tk.Label(logo_frame, image=self.logo1, bg="#FFF9C4").grid(row=0, column=0, padx=5)
 
@@ -3562,7 +3631,24 @@ class EIS2EApp:
       
 root = tk.Tk()
 root.title("Hệ thống đo điện hóa")
-root.geometry("1500x1400")
+
+# Tự động điều chỉnh cửa sổ theo màn hình
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
+
+# Tính toán kích thước cửa sổ (90% màn hình để không bị che taskbar)
+window_width = int(screen_width * 0.9)
+window_height = int(screen_height * 0.9)
+
+# Đặt vị trí cửa sổ ở giữa màn hình
+x_position = (screen_width - window_width) // 2
+y_position = (screen_height - window_height) // 2
+
+root.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+
+# Cho phép maximize và resize cửa sổ
+root.state('zoomed')  # Tự động maximize trên Windows
+root.resizable(True, True)  # Cho phép thay đổi kích thước
 
 # ======= Tạo thanh menu chọn SWV hoặc EIS =======
 nav_frame = ttk.Frame(root)
